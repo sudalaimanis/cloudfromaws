@@ -1,0 +1,211 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "",
+    "Metadata": {
+
+    },
+    "Parameters": {
+      "SVPCCIDR": {
+          "Description": "svpc cidr",
+          "Type": "String",
+          "Default": "192.168.0.0/24"
+      },
+      "ss1cidr": {
+          "Description": "cidr for Spvc",
+          "Type": "String",
+          "Default": "192.168.0.0/25"
+      },
+      "ss1az": {
+          "Description": "this ss1az for ss1az",
+          "Type": "AWS::EC2::AvailabilityZone::Name"
+      },
+      "ss2cidr": {
+          "Description": "ss2 cidr for subnets",
+          "Type": "String",
+          "Default": "192.168.0.128/25"
+      },
+      "ss2az": {
+          "Description": "ss2 cidr for AZ",
+          "Type": "AWS::EC2::AvailabilityZone::Name"
+      },
+      "sjec2": {
+          "Description": "jump ec2 type",
+          "Type": "String",
+          "Default": "t2.micro"
+      },
+      "sjami": {
+          "Description": "ami for jump server",
+          "Type": "AWS::EC2::Image::Id"
+      },
+      "sjkey": {
+          "Description": "keypair for jump server",
+          "Type": "AWS::EC2::KeyPair::KeyName"
+      }
+   },
+    "Mappings": {
+
+    },
+    "Conditions": {
+
+    },
+    "Resources": {
+      "SVPC": {
+        "Type": "AWS::EC2::VPC",
+        "Properties": {
+          "CidrBlock": { "Ref": "SVPCCIDR" },
+          "Tags": [{ "Key": "Name", "Value":  "SVPC" }]
+        }
+      },
+      "sigw": {
+        "Type": "AWS::EC2::InternetGateway",
+        "Properties": {
+          "Tags": [{ "Key": "Name", "Value":  "sigw" }]
+        }
+      },
+      "AttachGateway": {
+        "Type": "AWS::EC2::VPCGatewayAttachment",
+        "Properties": {
+          "VpcId": { "Ref": "SVPC" },
+          "InternetGatewayId": { "Ref": "sigw" }
+        }
+      },
+      "ss1": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "AvailabilityZone": { "Ref": "ss1az" },
+          "MapPublicIpOnLaunch" : "true",
+          "VpcId": { "Ref": "SVPC" },
+          "CidrBlock": { "Ref": "ss1cidr" },
+          "Tags": [{ "Key": "Name", "Value":  "ss1" }]
+        }
+      },
+      "ss2": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "AvailabilityZone": { "Ref": "ss2az" },
+          "MapPublicIpOnLaunch" : "false",
+          "VpcId": { "Ref": "SVPC" },
+          "CidrBlock": { "Ref": "ss2cidr" },
+          "Tags": [{ "Key": "Name", "Value":  "ss2" }]
+        }
+      },
+      "sjsg" : {
+        "Type" : "AWS::EC2::SecurityGroup",
+        "Properties" : {
+          "GroupDescription" : "SG for SPVC",
+          "SecurityGroupIngress" : [{
+            "IpProtocol" : "tcp",
+            "FromPort" : 22,
+            "ToPort" : 22,
+            "CidrIp" : "0.0.0.0/0"
+        }],
+          "VpcId" : { "Ref": "SVPC" },
+          "Tags" :  [{ "Key": "Name", "Value":  "sjsg" }]
+        }
+      },
+      "sjump1": {
+          "Type": "AWS::EC2::Instance",
+          "Properties": {
+              "KeyName": { "Ref": "sjkey" } ,
+              "SubnetId": { "Ref": "ss1" },
+              "ImageId": { "Ref": "sjami" },
+              "InstanceType": { "Ref": "sjec2" },
+              "Monitoring": "false",
+              "SecurityGroupIds" : [{ "Ref": "sjsg" }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": "sjump1"
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                      "Fn::Join": [
+                          "",
+                          [
+                              "#!/bin/bash -ex",
+                              "-"
+                          ]
+                      ]
+                  }
+              }
+      }
+    },
+    "apubrt": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": { "Ref": "SVPC" },
+        "Tags": [{ "Key": "Name", "Value":  "apubrt" }]
+      }
+    },
+    "apubroute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": { "Ref": "apubrt" },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": { "Ref": "sigw" }
+      }
+    },
+    "apubsnass": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": { "Ref": "ss1" },
+        "RouteTableId": { "Ref": "apubrt" }
+      }
+    },
+
+    "sjump2": {
+        "Type": "AWS::EC2::Instance",
+        "Properties": {
+            "KeyName": { "Ref": "sjkey" },
+            "SubnetId": { "Ref": "ss2" },
+            "ImageId": { "Ref": "sjami" },
+            "InstanceType": { "Ref": "sjec2" },
+            "Monitoring": "false",
+            "SecurityGroupIds" : [{ "Ref": "sjsg" }],
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "sjump2"
+                }
+            ],
+            "UserData": {
+                "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            "#!/bin/bash -ex",
+                            "-"
+                        ]
+                    ]
+                }
+            }
+    }
+  },
+  "sjprt": {
+    "Type": "AWS::EC2::RouteTable",
+    "Properties": {
+      "VpcId": { "Ref": "SVPC" },
+      "Tags": [{ "Key": "Name", "Value":  "sjprt" }]
+    }
+  },
+  "sjprout": {
+    "Type": "AWS::EC2::Route",
+    "Properties": {
+      "RouteTableId": { "Ref": "sjprt" },
+      "DestinationCidrBlock": "0.0.0.0/0",
+      "GatewayId": { "Ref": "sigw" }
+    }
+  },
+  "sjpacc": {
+    "Type": "AWS::EC2::SubnetRouteTableAssociation",
+    "Properties": {
+      "SubnetId": { "Ref": "ss2" },
+      "RouteTableId": { "Ref": "sjprt" }
+    }
+  }
+},
+"Outputs": {
+
+    }
+}
